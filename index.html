@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Himachal Pradesh Air Quality Dashboard</title>
+    <!-- Load Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Use Inter font -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f9fafb;
+        }
+        /* Hide scrollbar for the forecast chart */
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <div id="app" class="p-4 sm:p-8 antialiased">
+       
+    </div>
+
+    <script>
+       
+        const AQI_COLORS = {
+            'Good': { range: '0-50', name: "Good", color: "bg-green-600", hex: "#00b200" },
+            'Moderate': { range: '51-100', name: "Moderate", color: "bg-yellow-500", hex: "#ffcc00" },
+            'Unhealthy for Sensitive Groups': { range: '101-150', name: "Unhealthy for Sensitive Groups", color: "bg-orange-500", hex: "#ff9900" },
+            'Unhealthy': { range: '151-200', name: "Unhealthy", color: "bg-red-600", hex: "#ff0000" },
+            'Very Unhealthy': { range: '201-300', name: "Very Unhealthy", color: "bg-purple-600", hex: "#990099" },
+            'Hazardous': { range: '301+', name: "Hazardous", color: "bg-maroon-700", hex: "#660000" },
+        };
+
+        /**
+         * Derives the AQI category based on the value.
+         */
+        const getAqiCategory = (aqi) => {
+            if (aqi <= 50) return AQI_COLORS['Good'];
+            if (aqi <= 100) return AQI_COLORS['Moderate'];
+            if (aqi <= 150) return AQI_COLORS['Unhealthy for Sensitive Groups'];
+            if (aqi <= 200) return AQI_COLORS['Unhealthy'];
+            if (aqi <= 300) return AQI_COLORS['Very Unhealthy'];
+            return AQI_COLORS['Hazardous'];
+        };
+
+        
+        const getHealthAdvisories = (aqi) => {
+            let general, sensitive, respiratory;
+
+            if (aqi <= 50) { // Good
+                general = "Enjoy all outdoor activities. No restrictions.";
+                sensitive = "No risk. Enjoy outdoor activities as normal.";
+                respiratory = "No need for special precautions. Follow usual routine.";
+            } else if (aqi <= 100) { // Moderate
+                general = "Generally safe. Enjoy outdoor activities.";
+                sensitive = "Limit prolonged or heavy exertion outdoors. Take more breaks.";
+                respiratory = "Limit prolonged or heavy exertion. Keep quick-relief medicine handy and follow your action plan.";
+            } else if (aqi <= 150) { // Unhealthy for Sensitive Groups
+                general = "Unusually sensitive people should consider limiting prolonged outdoor exertion.";
+                sensitive = "Avoid prolonged or heavy exertion outdoors. Reschedule heavy activity to better air quality periods. Keep windows closed.";
+                respiratory = "Use N95 mask outdoors. Avoid all strenuous outdoor activity. Ensure medication supply is adequate.";
+            } else if (aqi <= 200) { // Unhealthy
+                general = "Limit prolonged or heavy exertion outdoors. Cut back on outdoor activities.";
+                sensitive = "Avoid all outdoor activity. Stay indoors and keep air cleaner running. Wear a high-quality mask (N95/P100) if stepping out is unavoidable.";
+                respiratory = "Stay strictly indoors. Avoid stair climbing and other heavy indoor tasks. Consult doctor if symptoms worsen.";
+            } else { // Very Unhealthy / Hazardous
+                general = "Avoid all physical activity outdoors. Stay indoors and keep windows closed.";
+                sensitive = "Everyone should remain indoors and limit physical activity. Use air conditioning with recirculated air.";
+                respiratory = "This is a health emergency. Remain indoors, use air purifiers, and be ready to seek medical attention if breathing difficulties arise.";
+            }
+
+            return { general, sensitive, respiratory };
+        };
+
+
+        // Mock data structure tailored for all 12 Himachal Pradesh districts
+        const MOCK_HP_DATA = {
+            "Shimla, Shimla Distt, HP": {
+                aqi: 48,
+                dominant: "Ozone",
+                health: "Air quality is clean and satisfactory, typical of the capital hill station. Enjoy outdoor activities.",
+                base: 45,
+                pollutantData: [
+                    { name: "PM2.5", value: 9.5, unit: 'µg/m³', icon: 'Leaf' },
+                    { name: "Ozone", value: 52.0, unit: 'ppb', icon: 'Sun' },
+                    { name: "NO2", value: 8.2, unit: 'ppb', icon: 'Zap' },
+                    { name: "PM10", value: 20.0, unit: 'µg/m³', icon: 'Wind' },
+                ]
+            },
+            "Manali, Kullu Distt, HP": {
+                aqi: 85,
+                dominant: "PM2.5",
+                health: "Sensitive groups (children, elderly) should limit heavy exertion outdoors due to moderate particulate matter from tourism and traffic.",
+                base: 80,
+                pollutantData: [
+                    { name: "PM2.5", value: 30.2, unit: 'µg/m³', icon: 'Leaf' },
+                    { name: "PM10", value: 55.1, unit: 'µg/m³', icon: 'Wind' },
+                    { name: "CO", value: 4.5, unit: 'ppm', icon: 'Sun' },
+                    { name: "SO2", value: 5.0, unit: 'ppb', icon: 'Zap' },
+                ]
+            },
+            "Baddi, Solan Distt, HP": {
+                aqi: 125,
+                dominant: "PM2.5",
+                health: "Active children and adults, and people with respiratory disease, should limit prolonged outdoor exertion due to industrial emissions.",
+                base: 120,
+                pollutantData: [
+                    { name: "PM2.5", value: 45.0, unit: 'µg/m³', icon: 'Leaf' },
+                    { name: "NO2", value: 35.0, unit: 'ppb', icon: 'Zap' },
+                    { name: "PM10", value: 78.0, unit: 'µg/m³', icon: 'Wind' },
+                    { name: "Ozone", value: 30.0, unit: 'ppb', icon: 'Sun' },
+                ]
+            },
+            "Dharamshala, Kangra Distt, HP": {
+                aqi: 65,
+                dominant: "PM10",
+                health: "Generally good air quality. Enjoy outdoor activities, but watch for dust during dry seasons, especially near construction.",
+                base: 60,
+                pollutantData: [
+                    { name: "PM2.5", value: 12.0, unit: 'µg/m³', icon: 'Leaf' },
+                    { name: "PM10", value: 40.0, unit: 'µg/m³', icon: 'Wind' },
+                    { name: "Ozone", value: 40.0, unit: 'ppb', icon: 'Sun' },
+                    { name: "CO", value: 2.0, unit: 'ppm', icon: 'Zap' },
+                ]
+            },
+
+            // Newly Added Districts
+            "Bilaspur, Bilaspur Distt, HP": {
+                aqi: 75,
+                dominant: "PM10",
+                health: "Air quality is moderate. Children and individuals with lung conditions should limit prolonged outdoor physical activity.",
+                base: 70,
+                pollutantData: [
+                    { name: "PM2.5", value: 25.0, unit: 'µg/m³', icon: 'Leaf' },
+                    { name: "PM10", value: 48.0, unit: 'µg/m³', icon: 'Wind' },
+                    { name: "NO2", value: 15.0, unit: 'ppb', icon: 'Zap' },
+                    { name: "Ozone", value: 45.0, unit: 'ppb', icon: 'Sun' },
+                ]
+            },
+            "Chamba, Chamba Distt, HP": {
+                aqi: 35,
+                dominant: "Ozone",
+                health: "Excellent air quality. Enjoy all outdoor activities in this high-altitude district.",
+                base: 30,
+                pollutantData: [
+                    { name: "PM2.5", value: 7.0, unit: 'µg/m³', icon: 'Leaf' },
+                    { name: "PM10", value: 15.0, unit: 'µg/m³', icon: 'Wind' },
+                    { name: "Ozone", value: 45.0, unit: 'ppb', icon: 'Sun' },
+                    { name: "CO", value: 1.5, unit: 'ppm', icon: 'Zap' },
+                ]
+            },
+            "Hamirpur, Hamirpur Distt, HP": {
+                aqi: 60,
+                dominant: "PM2.5",
+                health: "Air quality is acceptable. Most individuals can enjoy activities, but sensitive groups should take minor precautions.",
+                base: 55,
+                pollutantData: [
+                    { name: "PM2.5", value: 18.0, unit: 'µg/m³', icon: 'Leaf' },
+                    { name: "NO2", value: 10.0, unit: 'ppb', icon: 'Zap' },
+                    { name: "PM10", value: 35.0, unit: 'µg/m³', icon: 'Wind' },
+                    { name: "SO2", value: 4.0, unit: 'ppb', icon: 'Cloud' },
+                ]
+            },
+            "Reckong Peo, Kinnaur Distt, HP": {
+                aqi: 25,
+                dominant: "PM2.5",
+                health: "Pristine air quality due to the remote, high-altitude location. Ideal for outdoor activity.",
+                base: 20,
+                pollutantData: [
+                    { name: "PM2.5", value: 5.0, unit: 'µg/m³', icon: 'Leaf' },
+                    { name: "Ozone", value: 40.0, unit: 'ppb', icon: 'Sun' },
+                    { name: "CO", value: 1.0, unit: 'ppm', icon: 'Zap' },
+                    { name: "PM10", value: 10.0, unit: 'µg/m³', icon: 'Wind' },
+                ]
+            },
+            "Keylong, Lahaul and Spiti Distt, HP": {
+                aqi: 15,
+                dominant: "PM10",
+                health: "The cleanest air available. Enjoy the mountain environment without any air quality concerns.",
+                base: 10,
+                pollutantData: [
+                    { name: "PM2.5", value: 3.0, unit: 'µg/m³', icon: 'Leaf' },
+                    { name: "PM10", value: 7.0, unit: 'µg/m³', icon: 'Wind' },
+                    { name: "Ozone", value: 35.0, unit: 'ppb', icon: 'Sun' },
+                    { name: "NO2", value: 2.0, unit: 'ppb', icon: 'Zap' },
+                ]
+            },
+            "Mandi, Mandi Distt, HP": {
+                aqi: 88,
+                dominant: "PM2.5",
+                health: "Moderate air quality. Sensitive individuals should be cautious of prolonged exposure, especially near main roads.",
+                base: 85,
+                pollutantData: [
+                    { name: "PM2.5", value: 33.0, unit: 'µg/m³', icon: 'Leaf' },
+                    { name: "PM10", value: 60.0, unit: 'µg/m³', icon: 'Wind' },
+                    { name: "CO", value: 5.0, unit: 'ppm', icon: 'Zap' },
+                    { name: "SO2", value: 6.0, unit: 'ppb', icon: 'Cloud' },
+                ]
+            },
+            "Nahan, Sirmaur Distt, HP": {
+                aqi: 105,
+                dominant: "PM2.5",
+                health: "Unhealthy for Sensitive Groups. Avoid prolonged or heavy exertion outdoors. Limit time spent outside and keep windows closed.",
+                base: 100,
+                pollutantData: [
+                    { name: "PM2.5", value: 38.0, unit: 'µg/m³', icon: 'Leaf' },
+                    { name: "PM10", value: 65.0, unit: 'µg/m³', icon: 'Wind' },
+                    { name: "NO2", value: 20.0, unit: 'ppb', icon: 'Zap' },
+                    { name: "Ozone", value: 40.0, unit: 'ppb', icon: 'Sun' },
+                ]
+            },
+            "Una, Una Distt, HP": {
+                aqi: 95,
+                dominant: "PM10",
+                health: "Moderate air quality, trending towards the higher end due to proximity to the plains. Sensitive groups should exercise caution.",
+                base: 90,
+                pollutantData: [
+                    { name: "PM2.5", value: 35.0, unit: 'µg/m³', icon: 'Leaf' },
+                    { name: "PM10", value: 70.0, unit: 'µg/m³', icon: 'Wind' },
+                    { name: "CO", value: 4.0, unit: 'ppm', icon: 'Zap' },
+                    { name: "SO2", value: 5.0, unit: 'ppb', icon: 'Cloud' },
+                ]
+            },
+        };
+
+        const availableLocations = Object.keys(MOCK_HP_DATA);
+
+        /**
+         * Mock data fetching function that generates current AQI and a 48-hour forecast.
+         */
+        const mockFetchAqiData = async (location) => {
+            await new Promise(resolve => setTimeout(resolve, 800)); // Simulate API delay
+
+            const data = MOCK_HP_DATA[location];
+            if (!data) throw new Error(`Data for ${location} not found.`);
+
+            const { aqi, dominant, health, base, pollutantData } = data;
+
+            // Generate forecast data based on the base AQI
+            const forecast = Array.from({ length: 48 }, (_, i) => {
+                let currentAqi = Math.max(10, base + Math.sin(i / 8) * 20 + Math.random() * 10 - 5);
+                const date = new Date();
+                const futureDate = new Date(date.getTime() + i * 60 * 60 * 1000);
+                const hour = futureDate.getHours();
+                const timeLabel = hour === 0 ? '12 AM' : (hour > 12 ? `${hour - 12} PM` : `${hour} AM`);
+
+                return {
+                    time: timeLabel,
+                    aqi: Math.round(currentAqi),
+                };
+            });
+
+            return {
+                location,
+                aqi: aqi + Math.floor(Math.random() * 5), // Slight variation
+                lastUpdated: new Date().toLocaleTimeString(),
+                healthMessage: health,
+                pollutantDetails: pollutantData,
+                dominantPollutant: dominant,
+                forecast: forecast,
+            };
+        };
+
+
+        // --- 2. LLM API UTILITY FUNCTIONS ---
+
+        /**
+         * Fetches data with exponential backoff.
+         */
+        const fetchWithRetry = async (url, options, maxRetries = 3) => {
+            let lastError = null;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.ok) return response;
+                    if (response.status === 429) {
+                        const delay = Math.pow(2, i) * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                } catch (e) {
+                    lastError = e;
+                    const delay = Math.pow(2, i) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+            throw new Error(`Failed to fetch content after multiple retries. Last error: ${lastError.message}`);
+        };
+
+        // --- 3. ICON & DOM UTILITY FUNCTIONS ---
+        
+        // A dictionary to store SVG paths for the required Lucide icons
+        const ICON_SVGS = {
+            Leaf: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.86 9.86c-2-3-6-2.5-6.5-6.5C7 5 9 5 11 7h.01C13.5 10.5 13 14 11 16z"/><path d="M22 13.5V16A7 7 0 0 1 9.86 9.86"/></svg>',
+            Sun: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>',
+            Wind: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.6 17.6A10 10 0 1 1 18 10h-2"/><path d="M16 10h-6"/><path d="M12 14h-4"/><path d="M20 18h-8"/></svg>',
+            Zap: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20l8-10h-8l-8 10z"/></svg>',
+            Cloud: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9.96l.96.96A4.5 4.5 0 0 1 20 14.5a4.5 4.5 0 0 1-2.5 4.5z"/></svg>',
+            User: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+            Users: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+            HeartPulse: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.61 0-3.05.7-4.18 1.83L12 5.21l-.32-.32C9.5 3.7 8.06 3 6.5 3A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="M14 22v-4h-4v4"/></svg>',
+            Shield: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+            Bell: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+            ChevronDown: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+            Loader: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>',
+            MapPin: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+        };
+
+        function getIconSvg(name, classes = "") {
+            const svg = ICON_SVGS[name] || '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>';
+            return `<span class="${classes}">${svg}</span>`;
+        }
+        
+        // --- 4. STATE MANAGEMENT ---
+
+        const appState = {
+            selectedLocation: availableLocations[0],
+            aqiData: null,
+            loading: true,
+            error: null,
+            llmSummary: null,
+            isSummaryLoading: false,
+            summaryError: null,
+            apiKey: "", // Automatically handled by Canvas
+        };
+
+        const updateState = (newState) => {
+            Object.assign(appState, newState);
+            render();
+        };
+        
+        // --- 5. LLM API CALLS ---
+
+        const generateLlmSummary = async (data) => {
+            updateState({ isSummaryLoading: true, summaryError: null, llmSummary: null });
+a
+            const category = getAqiCategory(data.aqi);
+            const userQuery = `You are an AI air quality analyst specializing in the Himalayan region of Himachal Pradesh. Provide a concise, single-paragraph, easy-to-understand interpretation of the current air quality situation based on the following data: Location: ${data.location}. Current AQI: ${data.aqi}. Category: ${category.name}. Dominant Pollutant: ${data.dominantPollutant}. Focus on the immediate health implications and recommended actions, specifically considering the clean, mountainous environment of the state.`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${appState.apiKey}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: {
+                    parts: [{ text: "Act as a friendly, reliable, and hyper-local air quality specialist for HP. Keep the summary concise (max 3 sentences) and the tone supportive." }]
+                },
+            };
+
+            try {
+                const response = await fetchWithRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (text) {
+                    updateState({ llmSummary: text, isSummaryLoading: false });
+                } else {
+                    updateState({ summaryError: "Could not parse AI response.", isSummaryLoading: false });
+                }
+            } catch (e) {
+                console.error("LLM API Error:", e);
+                updateState({ summaryError: "Failed to connect to AI service.", isSummaryLoading: false });
+            }
+        };
+
+
+        // --- 6. DATA FETCHING ---
+
+        const fetchData = async (location) => {
+            updateState({ loading: true, error: null, aqiData: null, llmSummary: null, summaryError: null });
+
+            try {
+                const data = await mockFetchAqiData(location);
+                updateState({ aqiData: data, loading: false });
+                generateLlmSummary(data); // Auto-generate summary
+            } catch (err) {
+                console.error("Failed to fetch AQI data:", err);
+                updateState({ error: "Could not load data. Please try again.", loading: false });
+            }
+        };
+
+        // --- 7. RENDERING COMPONENTS (HTML GENERATION) ---
+
+        const renderHeader = () => {
+            const header = document.createElement('header');
+            header.className = "flex justify-between items-center py-4 border-b border-gray-200 max-w-5xl mx-auto sticky top-0 bg-gray-50 z-10";
+            header.innerHTML = `
+                <div class="flex items-center text-xl font-bold text-gray-800">
+                    ${getIconSvg('Leaf', 'w-6 h-6 mr-2 text-green-600')}
+                    Himachal Pradesh Air
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="ai-summary-btn" class="p-2 rounded-full text-gray-600 hover:bg-gray-100 transition disabled:opacity-50" title="Generate AI Summary" ${appState.isSummaryLoading || appState.loading ? 'disabled' : ''}>
+                        ${getIconSvg('Bell', 'w-5 h-5')}
+                    </button>
+                    <div id="location-dropdown" class="relative group">
+                        <button class="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-full text-sm font-medium hover:bg-gray-50 transition shadow-sm">
+                            ${appState.selectedLocation.split(',')[0]}
+                            ${getIconSvg('ChevronDown', 'w-4 h-4 ml-2')}
+                        </button>
+                        <div id="location-options" class="absolute right-0 mt-2 w-64 max-h-80 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl z-20 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-300">
+                            <!-- Options rendered here -->
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Location Options
+            const optionsContainer = header.querySelector('#location-options');
+            availableLocations.forEach(loc => {
+                const button = document.createElement('button');
+                button.className = "block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition";
+                button.textContent = loc;
+                button.addEventListener('click', () => {
+                    updateState({ selectedLocation: loc });
+                });
+                optionsContainer.appendChild(button);
+            });
+
+            // AI Button Listener
+            header.querySelector('#ai-summary-btn').addEventListener('click', () => {
+                if (appState.aqiData) {
+                    generateLlmSummary(appState.aqiData);
+                }
+            });
+
+            return header;
+        };
+
+        const renderMainAqiCard = (data, category) => {
+            const card = document.createElement('div');
+            card.className = `p-6 sm:p-8 rounded-2xl shadow-2xl text-white transition-all duration-500`;
+            card.style.backgroundColor = category.hex;
+
+            const districtDetails = data.location.split(',');
+            const city = districtDetails[0];
+            const district = districtDetails.slice(1).join(', ').trim();
+
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h1 class="text-2xl font-semibold">${city}</h1>
+                        <p class="text-sm mt-1 opacity-80">${district}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-6xl sm:text-7xl font-extrabold leading-none">${Math.round(data.aqi)}</p>
+                        <p class="text-lg font-medium tracking-wider mt-1">AQI</p>
+                    </div>
+                </div>
+
+                <div class="mt-6 p-4 rounded-lg bg-black/10 backdrop-blur-sm">
+                    <h2 class="text-xl font-bold">${category.name}</h2>
+                    <p class="mt-1 text-sm opacity-90">${data.healthMessage}</p>
+                </div>
+                
+                <p class="mt-4 text-sm font-medium text-white/90">
+                    Dominant Pollutant: <span class="font-bold">${data.dominantPollutant}</span>
+                </p>
+            `;
+            return card;
+        };
+
+        const renderLlmInterpretation = () => {
+            let content;
+            if (appState.isSummaryLoading) {
+                content = `
+                    <div class="flex items-center space-x-2">
+                        ${getIconSvg('Loader', 'w-5 h-5 animate-spin text-gray-400')}
+                        <span class="text-gray-600">Generating expert analysis...</span>
+                    </div>
+                `;
+            } else if (appState.summaryError) {
+                content = `<p class="text-sm text-red-500">Error generating summary: ${appState.summaryError}</p>`;
+            } else if (appState.llmSummary) {
+                content = `<p class="text-gray-700 text-sm leading-relaxed">${appState.llmSummary}</p>`;
+            } else {
+                content = `<p class="text-gray-500 text-sm">Tap the bell icon to get a full AI interpretation tailored for Himachal Pradesh.</p>`;
+            }
+
+            const card = document.createElement('div');
+            card.className = "p-4 mt-6 bg-white rounded-xl shadow-lg border-l-4 border-l-purple-500";
+            card.innerHTML = `
+                <div class="flex items-center mb-3 space-x-2">
+                    ${getIconSvg('Zap', 'w-5 h-5 text-purple-600')}
+                    <h2 class="text-lg font-bold text-gray-800">AI Health Summary</h2>
+                </div>
+                ${content}
+            `;
+            return card;
+        };
+        
+        const renderHealthRecommendations = (aqi, color) => {
+            const advisories = getHealthAdvisories(aqi);
+
+            const advisoryGroups = [
+                { title: "General Population (Adults)", icon: 'User', advice: advisories.general, color: "text-blue-500", bg: "bg-blue-50" },
+                { title: "Sensitive Groups (Children & Elderly)", icon: 'Users', advice: advisories.sensitive, color: "text-yellow-600", bg: "bg-yellow-50" },
+                { title: "Respiratory Conditions (Asthma, COPD)", icon: 'HeartPulse', advice: advisories.respiratory, color: "text-red-500", bg: "bg-red-50" },
+            ];
+
+            const card = document.createElement('div');
+            card.className = "mt-8 p-6 bg-white rounded-xl shadow-lg";
+            
+            const advisoryHtml = advisoryGroups.map(group => `
+                <div class="p-4 rounded-lg border-2 ${group.bg} hover:shadow-md transition duration-300" style="border-color: ${color}; border-left-width: 6px;">
+                    <div class="flex items-center mb-2">
+                        ${getIconSvg(group.icon, `w-5 h-5 mr-2 ${group.color}`)}
+                        <h4 class="font-semibold text-gray-800">${group.title}</h4>
+                    </div>
+                    <p class="text-sm text-gray-700">${group.advice}</p>
+                </div>
+            `).join('');
+
+            card.innerHTML = `
+                <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    ${getIconSvg('Shield', 'w-6 h-6 mr-2 text-indigo-600')}
+                    Tailored Health Advisory (By Group)
+                </h3>
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    ${advisoryHtml}
+                </div>
+                <p class="mt-4 text-xs text-gray-500 italic">
+                    Advisories are based on current AQI, consult a doctor for personalized health advice.
+                </p>
+            `;
+            return card;
+        };
+
+        const renderPollutantBreakdown = (pollutantDetails) => {
+            const card = document.createElement('div');
+            card.className = "mt-8 p-6 bg-white rounded-xl shadow-lg";
+
+            const pollutantHtml = pollutantDetails.map(pollutant => {
+                const pollutantAQI = pollutant.value * (pollutant.name === "Ozone" ? 2 : 5); 
+                const pollutantCategory = getAqiCategory(pollutantAQI); 
+
+                return `
+                    <div class="flex flex-col items-center p-3 border rounded-xl bg-gray-50 hover:bg-gray-100 transition">
+                        <div class="flex items-center justify-center w-10 h-10 rounded-full mb-2" style="background-color: ${pollutantCategory.hex + '30'};">
+                            ${getIconSvg(pollutant.icon, `w-5 h-5`)}
+                        </div>
+                        <p class="mt-1 text-2xl font-bold text-gray-800">${pollutant.value.toFixed(1)}</p>
+                        <p class="text-xs text-gray-500">${pollutant.unit}</p>
+                        <p class="mt-1 text-sm font-semibold text-gray-700">${pollutant.name}</p>
+                        <p class="text-xs font-medium mt-1" style="color: ${pollutantCategory.hex};">${pollutantCategory.name}</p>
+                    </div>
+                `;
+            }).join('');
+
+            card.innerHTML = `
+                <h3 class="text-lg font-bold text-gray-800 mb-4">Detailed Pollutants</h3>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    ${pollutantHtml}
+                </div>
+            `;
+            return card;
+        };
+        
+        const renderForecastChart = (forecast) => {
+            const card = document.createElement('div');
+            card.className = "p-4 mt-6 bg-white rounded-xl shadow-lg";
+
+            const maxAqiDisplay = 200; 
+            const forecastBars = forecast.map((dataPoint, index) => {
+                const category = getAqiCategory(dataPoint.aqi);
+                const barHeight = (Math.min(dataPoint.aqi, maxAqiDisplay) / maxAqiDisplay) * 100;
+
+                return `
+                    <div class="flex flex-col items-center flex-shrink-0 w-12 pt-2">
+                        <span class="text-sm font-semibold" style="color: ${category.hex};">
+                            ${dataPoint.aqi}
+                        </span>
+                        <div class="flex items-end h-24 mt-1 w-full justify-center">
+                            <div
+                                class="w-6 rounded-t-lg transition-all duration-300"
+                                style="height: ${barHeight}%; background-color: ${category.hex};"
+                            ></div>
+                        </div>
+                        <span class="mt-2 text-xs text-gray-500">
+                            ${dataPoint.time}
+                        </span>
+                    </div>
+                `;
+            }).join('');
+
+            card.innerHTML = `
+                <h2 class="mb-4 text-xl font-bold text-gray-800">48-Hour Forecast</h2>
+                <div class="flex overflow-x-scroll pb-2 space-x-3 scrollbar-hide">
+                    ${forecastBars}
+                </div>
+            `;
+            return card;
+        };
+
+
+        // --- 8. MAIN RENDER FUNCTION ---
+
+        const render = () => {
+            const app = document.getElementById('app');
+            // Clear previous content
+            app.innerHTML = '';
+
+            // 1. Render Header
+            app.appendChild(renderHeader());
+
+            const mainContainer = document.createElement('main');
+            mainContainer.className = "mt-8 max-w-5xl mx-auto";
+
+            // 2. Render Loading/Error State
+            if (appState.loading || appState.error) {
+                const loader = document.createElement('div');
+                loader.className = "flex flex-col items-center justify-center p-12 bg-white rounded-xl shadow-lg";
+                if (appState.loading) {
+                    loader.innerHTML = `
+                        ${getIconSvg('Loader', 'w-8 h-8 text-blue-500 animate-spin')}
+                        <p class="mt-4 text-lg font-medium text-gray-600">Fetching data for ${appState.selectedLocation.split(',')[0]}...</p>
+                    `;
+                } else if (appState.error) {
+                    loader.innerHTML = `<p class="mt-4 text-lg font-medium text-red-600">${appState.error}</p>`;
+                }
+                mainContainer.appendChild(loader);
+            } 
+            
+            // 3. Render Data Views
+            if (!appState.loading && appState.aqiData) {
+                const data = appState.aqiData;
+                const category = getAqiCategory(data.aqi);
+
+                mainContainer.appendChild(renderMainAqiCard(data, category));
+                mainContainer.appendChild(renderLlmInterpretation());
+                mainContainer.appendChild(renderHealthRecommendations(data.aqi, category.hex));
+                mainContainer.appendChild(renderPollutantBreakdown(data.pollutantDetails));
+                mainContainer.appendChild(renderForecastChart(data.forecast));
+            }
+
+            app.appendChild(mainContainer);
+        };
+
+        // --- 9. INITIALIZATION ---
+
+        window.onload = () => {
+            // Initial data fetch and render
+            fetchData(appState.selectedLocation);
+        };
+
+    </script>
+</body>
+</html>
